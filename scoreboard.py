@@ -77,38 +77,54 @@ def bouts(payload):
     return result
 
 
-def pixels(draw, x, y, label, color, width):
+# Three-row lettering for the portrait-first panel layout.
+SMALL_FONT = dict(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :-./'",
+                      ("275 676 343 655 767 764 347 575 727 115 565 447 "
+                       "775 765 252 674 257 665 361 722 557 552 577 525 "
+                       "522 627 757 262 637 733 571 763 477 712 777 771 "
+                       "000 202 070 002 124 200").split()))
+
+
+def pixels(draw, x, y, label, color, width, font=FONT):
     label = unicodedata.normalize("NFKD", label.upper()).encode("ascii", "ignore").decode()
     for letter in label:
         if x + 3 > width:
             break
-        for row, mask in enumerate(FONT.get(letter, "7120")):
+        for row, mask in enumerate(font.get(letter, font["2"])):
             for col in range(3):
                 if int(mask) & (4 >> col):
                     draw.point((x + col, y + row), color)
         x += 4
 
 
-def fight_frame(bout, tick, offline):
+def fight_frame(bout, tick, offline, large=False):
     image = Image.new("RGB", (64, 32))
     draw = ImageDraw.Draw(image)
-    for corner, x in enumerate((0, 46)):
+    for corner, x in enumerate((0, 32) if large else (0, 46)):
         color = ("#ff5050", "#4b9aff")[corner]
         portrait = photo(bout.athlete_ids[corner])
         if portrait is not None:
-            thumbnail = portrait.resize((18, 16), RESAMPLE.LANCZOS)
+            if large:
+                # The cached portrait is 30x30. Keep its aspect ratio and frame the face.
+                thumbnail = portrait.crop((0, 8, 30, 23)).resize((32, 16), RESAMPLE.LANCZOS)
+            else:
+                thumbnail = portrait.resize((18, 16), RESAMPLE.LANCZOS)
             image.paste(thumbnail, (x, 0), thumbnail)
         else:
             pixels(draw, x + 6, 6, bout.names[corner][:1], color, x + 18)
-        draw.line((x, 17, x+17, 17), fill=color)
+        if not large:
+            draw.line((x, 17, x+17, 17), fill=color)
         winner = bout.state == "post" and bout.winner[corner]
-        pixels(draw, corner * 32, 19, bout.names[corner], "#63ff84" if winner else "white", (corner+1)*32)
+        pixels(draw, corner * 32, 16 if large else 19, bout.names[corner], "#63ff84" if winner else "white", (corner+1)*32, SMALL_FONT if large else FONT)
     status = {"post": "FINAL", "in": "LIVE", "pre": "CARD"}.get(bout.state, "UFC")
-    pixels(draw, 19, 2, status, "#ffb944", 46)
     timing = bout.timing or (bout.detail if bout.state == "in" else "")
-    round_no, _, clock = timing.partition(" ")
-    pixels(draw, 19, 8, round_no, "white", 46)
-    pixels(draw, 19, 12, clock, "white", 46)
+    if large:
+        pixels(draw, 0, 21, (status + " " + timing).strip(), "white", 64, SMALL_FONT)
+    else:
+        pixels(draw, 19, 2, status, "#ffb944", 46)
+        round_no, _, clock = timing.partition(" ")
+        pixels(draw, 19, 8, round_no, "white", 46)
+        pixels(draw, 19, 12, clock, "white", 46)
     captions = []
     if bout.state == "pre":
         captions.append(bout.detail)
@@ -118,13 +134,13 @@ def fight_frame(bout, tick, offline):
         captions.extend(bout.method[i:i+16] for i in range(0, len(bout.method), 16))
     captions.extend("J{} {}".format(i+1, score) for i, score in enumerate(bout.cards))
     footer = "FEED OFFLINE" if offline else (captions[tick % len(captions)] if captions else "SCORE PENDING")
-    pixels(draw, 0, 26, footer, "#65e3da", 64)
+    pixels(draw, 0, 26, footer, "#65e3da", 64, SMALL_FONT if large else FONT)
     return image
 
 
-def celebration(bout):
+def celebration(bout, large=False):
     label = bout.method.upper()
-    image = fight_frame(bout, 0, False)
+    image = fight_frame(bout, 0, False, large)
     for step in range(14):
         frame = image.copy()
         draw = ImageDraw.Draw(frame)
@@ -141,7 +157,7 @@ def celebration(bout):
         else:
             draw.line((0, 31, min(63, step*6), 31), fill="#62ffa3")
         offset = min(max(0, len(label)-16), max(0, step-4)*2)
-        pixels(draw, 0, 25, label[offset:], "white", 64)
+        pixels(draw, 0, 25, label[offset:], "white", 64, SMALL_FONT if large else FONT)
         yield frame
 
 
@@ -278,11 +294,11 @@ def main():
                 for finished in card:
                     if (finished.state == "post" and finished.method and finished.key in eligible
                             and finished.key not in played and not args.once):
-                        for frame in celebration(finished):
+                        for frame in celebration(finished, args.lower_portraits):
                             display(frame)
                             time.sleep(.12)
                         played.add(finished.key)
-                        display(render(finished))
+                        display(fight_frame(finished, 0, False, args.lower_portraits))
                         time.sleep(3)
             live = [b for b in card if b.state == "in"]
             pool = card if args.demo or offline else (live or card)
@@ -294,13 +310,17 @@ def main():
                     screens.append((bout, None))
             bout, corner = screens[index % len(screens)] if screens else (None, None)
             if args.demo and bout and bout.state == "post" and bout.key not in played:
-                for frame in celebration(bout):
+                for frame in celebration(bout, args.lower_portraits):
                     display(frame)
                     time.sleep(.12)
                 played.add(bout.key)
-            frame = render(bout, offline, args.demo, index // max(1, len(screens))) if corner is None else intro(bout, corner, args.demo)
-            if args.lower_portraits and bout and bout.state == "pre":
-                frame = fight_frame(bout, index, offline)
+            tick = index // max(1, len(screens))
+            if args.lower_portraits and bout:
+                frame = fight_frame(bout, tick, offline, large=True)
+            elif corner is None:
+                frame = render(bout, offline, args.demo, tick)
+            else:
+                frame = intro(bout, corner, args.demo)
             display(frame)
             if args.once:
                 return
