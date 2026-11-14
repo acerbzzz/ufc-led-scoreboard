@@ -3,9 +3,19 @@ from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from urllib.request import urlopen
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 
 RESAMPLE = getattr(Image, "Resampling", Image)
+
+
+LED_TONE = [round(186 * (value / 255.0) ** 1.32) for value in range(256)]
+
+
+def panel_portrait(image):
+    rgb = image.convert("RGB").filter(ImageFilter.UnsharpMask(radius=0.8, percent=85, threshold=4))
+    rgb = ImageEnhance.Color(rgb).enhance(1.42).point(LED_TONE * 3)
+    rgb.putalpha(image.getchannel("A"))
+    return rgb
 
 
 def crop_face(source):

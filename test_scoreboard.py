@@ -64,3 +64,23 @@ class FinishTests(unittest.TestCase):
         parsed = FightBoardTests().parse(fight)[0]
         self.assertEqual(parsed.cards, ("29-28","28-29","29-28"))
         self.assertEqual(parsed.method, "Decision - Split")
+
+class PanelRefinementTests(unittest.TestCase):
+    def test_portrait_limits_highlights_and_preserves_alpha(self):
+        from PIL import Image
+        from portraits import panel_portrait
+        sample = Image.new("RGBA", (3, 1))
+        sample.putdata([(255, 255, 255, 255), (145, 110, 90, 255), (0, 0, 0, 0)])
+        toned = panel_portrait(sample)
+        self.assertEqual(toned.getchannel("A").tobytes(), sample.getchannel("A").tobytes())
+        self.assertEqual(toned.getpixel((0, 0))[:3], (186, 186, 186))
+        red, green, blue, _ = toned.getpixel((1, 0))
+        self.assertGreater(red, green)
+        self.assertGreater(green, blue)
+
+    def test_stats_require_both_corners_and_keep_zero(self):
+        from scoreboard import paired_stats
+        pair = [{"statistics": [{"name":"knockdowns","displayValue":n}]} for n in ("0", "1")]
+        self.assertEqual(paired_stats(pair), ("KD 0-1",))
+        pair[0]["statistics"] = []
+        self.assertEqual(paired_stats(pair), ())

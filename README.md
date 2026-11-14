@@ -40,3 +40,19 @@ On an original Pi Zero W with the working legacy AFL setup, start UFC with
 `sudo python3 scoreboard.py --demo --driver matrix --brightness 10 --gpio-slowdown 2`.
 If Python 3 lacks rgbmatrix, the app sends frames to the AFL environment's
 /usr/bin/python process for display. Both processes exit on Ctrl+C.
+
+## Start the live card on power-up
+
+For the Pi installed at /home/pi/ufc-led-scoreboard, stop the foreground demo
+or live board with Ctrl+C, then run `sh scripts/enable-on-boot.sh`. It starts
+the live service now and enables it for future boots. It runs independently of
+the desktop and retries the feed while Wi-Fi connects. The service uses the
+lower full-color portrait layout, brightness 10, and GPIO slowdown 2.
+For logs use `sudo journalctl -u ufc-led-scoreboard -n 30`; to turn automatic
+startup off use `sudo systemctl disable --now ufc-led-scoreboard`.
+
+Portrait highlights are capped at 186/255, with stronger local detail and
+color saturation. The pre-fight caption cycles through the supplied weight
+class, scheduled rounds, and overall records. Live numeric stats appear when
+both fighters have reported values (KD knockdowns, TD takedowns landed,
+SIG significant strikes landed). Numbers run in left-to-right fighter order.

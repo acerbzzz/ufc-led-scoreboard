@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from urllib.request import Request, urlopen
 
 from PIL import Image, ImageDraw
-from portraits import photo, RESAMPLE
+from portraits import photo, panel_portrait, RESAMPLE
 from finishes import ResultFeed, method_label
 
 URL = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard"
@@ -32,6 +32,28 @@ class Bout:
     method: str = ""
     cards: tuple = ()
     timing: str = ""
+    division: str = ""
+    rounds: int = 0
+    records: tuple = ()
+    stats: tuple = ()
+    headliner: bool = False
+
+
+def paired_stats(pair):
+    columns = []
+    for fighter in pair:
+        values = {}
+        for stat in fighter.get("statistics") or []:
+            name = str(stat.get("name") or "").lower()
+            value = str(stat.get("displayValue", stat.get("value", "")))
+            if value.isdigit():
+                values[name] = value
+        columns.append(values)
+    return tuple("{} {}-{}".format(label, columns[0][key], columns[1][key])
+                 for key, label in (("knockdowns", "KD"), ("takedownslanded", "TD"),
+                                    ("significantstrikeslanded", "SIG"))
+                 if all(key in column for column in columns))
+
 
 
 def bouts(payload):
@@ -69,11 +91,25 @@ def bouts(payload):
             timing = "R{}".format(status["period"]) if status.get("period") else ""
             if timing and status.get("displayClock") not in (None, "", "-"):
                 timing += " " + status["displayClock"]
+            # Named UFC cards identify their headliners in the event title.
+            title = event.get("name", "").lower().split(":")[-1].strip()
+            sides = title.replace(" vs. ", " vs ").split(" vs ")
+            sides = [side.rsplit(" ", 1)[0] if side.split() and side.split()[-1].isdigit()
+                     else side for side in sides]
+            surnames = [name.lower() for name in names]
+            headliner = len(sides) == 2 and any(
+                all((" " + side).endswith(" " + name) for side, name in zip(sides, order))
+                for order in (surnames, surnames[::-1]))
             result.append(Bout(event.get("shortName") or "UFC", tuple(names), state, detail,
                                tuple(c.get("winner") is True for c in pair),
                                tuple(str(c.get("id") or c.get("athlete", {}).get("id") or "") for c in pair),
                                (str(event.get("id", "")), str(fight.get("id", ""))),
-                               method_label(status.get("result")), cards, timing))
+                               method_label(status.get("result")), cards, timing,
+                               (fight.get("type") or {}).get("abbreviation") or "",
+                               ((fight.get("format") or {}).get("regulation") or {}).get("periods") or 0,
+                               tuple(next((r.get("summary") for r in c.get("records") or []
+                                           if r.get("name") == "overall"), "") for c in pair),
+                               paired_stats(pair), headliner))
     return result
 
 
@@ -113,6 +149,7 @@ def fight_frame(bout, tick, offline, large=False):
                 thumbnail = portrait.crop((0, 8, 30, 23)).resize((32, 16), RESAMPLE.LANCZOS)
             else:
                 thumbnail = portrait.resize((18, 16), RESAMPLE.LANCZOS)
+            thumbnail = panel_portrait(thumbnail)
             image.paste(thumbnail, (x, 0), thumbnail)
         else:
             pixels(draw, x, 6, bout.names[corner][:1], color, x + (32 if large else 18))
@@ -121,6 +158,8 @@ def fight_frame(bout, tick, offline, large=False):
         winner = bout.state == "post" and bout.winner[corner]
         pixels(draw, corner * 32, 16 if large else 19, bout.names[corner], "#63ff84" if winner else "white", (corner+1)*32, SMALL_FONT if large else FONT)
     status = {"post": "FINAL", "in": "LIVE", "pre": "CARD"}.get(bout.state, "UFC")
+    if bout.state == "pre" and bout.detail == "UPCOMING":
+        status = ("MAIN EVENT" if bout.headliner else "UPCOMING") if large else "CARD"
     timing = bout.timing or (bout.detail if bout.state == "in" else "")
     if large:
         pixels(draw, 0, 21, (status + " " + timing).strip(), "white", 64, SMALL_FONT)
@@ -131,13 +170,24 @@ def fight_frame(bout, tick, offline, large=False):
         pixels(draw, 19, 12, clock, "white", 46)
     captions = []
     if bout.state == "pre":
-        captions.append(bout.detail)
+        if bout.division:
+            captions.append(bout.division)
+        if bout.rounds:
+            captions.append("{} ROUNDS".format(bout.rounds))
+        if len(bout.records) == 2 and all(bout.records):
+            captions.append(" ".join(bout.records))
+        if not captions or bout.detail != "UPCOMING":
+            captions.append(bout.detail)
     if True in bout.winner:
         captions.append("W " + bout.names[bout.winner.index(True)])
     if bout.method:
         captions.extend(bout.method[i:i+16] for i in range(0, len(bout.method), 16))
     captions.extend("J{} {}".format(i+1, score) for i, score in enumerate(bout.cards))
-    footer = "FEED OFFLINE" if offline else (captions[tick % len(captions)] if captions else "SCORE PENDING")
+    if bout.state in ("in", "post"):
+        captions.extend(bout.stats)
+        if bout.headliner:
+            captions.append("MAIN EVENT")
+    footer = "FEED OFFLINE" if offline else (captions[tick % len(captions)] if captions else (bout.division or "SCORE PENDING"))
     pixels(draw, 0, 26, footer, "#65e3da", 64, SMALL_FONT if large else FONT)
     return image
 
@@ -189,6 +239,7 @@ def intro(bout, corner, demo=False):
     if portrait is None:
         return render(bout, demo=demo)
     image = Image.new("RGB", (64, 32))
+    portrait = panel_portrait(portrait)
     image.paste(portrait, (0, 1), portrait)
     draw = ImageDraw.Draw(image)
     color = ("#ff5050", "#4b9aff")[corner]
