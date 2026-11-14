@@ -96,19 +96,22 @@ def fight_frame(bout, tick, offline):
         color = ("#ff5050", "#4b9aff")[corner]
         portrait = photo(bout.athlete_ids[corner])
         if portrait is not None:
-            thumbnail = portrait.resize((18, 17), RESAMPLE.LANCZOS)
+            thumbnail = portrait.resize((18, 16), RESAMPLE.LANCZOS)
             image.paste(thumbnail, (x, 0), thumbnail)
         else:
             pixels(draw, x + 6, 6, bout.names[corner][:1], color, x + 18)
         draw.line((x, 17, x+17, 17), fill=color)
         winner = bout.state == "post" and bout.winner[corner]
         pixels(draw, corner * 32, 19, bout.names[corner], "#63ff84" if winner else "white", (corner+1)*32)
-    pixels(draw, 19, 2, "FINAL" if bout.state == "post" else "LIVE", "#ffb944", 46)
-    timing = bout.timing or bout.detail
+    status = {"post": "FINAL", "in": "LIVE", "pre": "CARD"}.get(bout.state, "UFC")
+    pixels(draw, 19, 2, status, "#ffb944", 46)
+    timing = bout.timing or (bout.detail if bout.state == "in" else "")
     round_no, _, clock = timing.partition(" ")
     pixels(draw, 19, 8, round_no, "white", 46)
-    pixels(draw, 19, 14, clock, "white", 46)
+    pixels(draw, 19, 12, clock, "white", 46)
     captions = []
+    if bout.state == "pre":
+        captions.append(bout.detail)
     if True in bout.winner:
         captions.append("W " + bout.names[bout.winner.index(True)])
     if bout.method:
@@ -189,6 +192,18 @@ def fetch():
         return bouts(json.load(response))
 
 
+def lower_portraits(frame):
+    # Exchange the two row banks without flipping the image or its lettering.
+    result = Image.new("RGB", frame.size)
+    result.paste(frame.crop((0, 0, 64, 16)), (0, 16))
+    upper = frame.crop((0, 16, 64, 32))
+    # Draw every illuminated text pixel using the working red channel.
+    red = upper.convert("L").point(lambda value: 235 if value else 0)
+    dark = Image.new("L", upper.size)
+    result.paste(Image.merge("RGB", (red, dark, dark)), (0, 0))
+    return result
+
+
 def color_test():
     image = Image.new("RGB", (64, 32))
     draw = ImageDraw.Draw(image)
@@ -201,6 +216,7 @@ def color_test():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--lower-portraits", action="store_true", help="Use the lower panel half for full-color portraits")
     parser.add_argument("--color-test", action="store_true", help="Show RGB and white on both panel halves")
     parser.add_argument("--rgb-order", choices=("RGB","RBG","GRB","GBR","BRG","BGR"), default="RGB", help="Order of channels sent to the display")
     parser.add_argument("--demo", action="store_true")
@@ -231,6 +247,8 @@ def main():
     played = set()
     eligible = set()
     def display(frame):
+        if args.lower_portraits and not args.color_test:
+            frame = lower_portraits(frame)
         if args.rgb_order != "RGB":
             bands = dict(zip("RGB", frame.split()))
             frame = Image.merge("RGB", tuple(bands[key] for key in args.rgb_order))
@@ -270,7 +288,7 @@ def main():
             pool = card if args.demo or offline else (live or card)
             screens = []
             for bout in pool:
-                if bout.state == "pre" and bout.detail == "UPCOMING" and not offline:
+                if bout.state == "pre" and bout.detail == "UPCOMING" and not offline and not args.lower_portraits:
                     screens.extend([(bout, 0), (bout, 1)])
                 else:
                     screens.append((bout, None))
@@ -281,6 +299,8 @@ def main():
                     time.sleep(.12)
                 played.add(bout.key)
             frame = render(bout, offline, args.demo, index // max(1, len(screens))) if corner is None else intro(bout, corner, args.demo)
+            if args.lower_portraits and bout and bout.state == "pre":
+                frame = fight_frame(bout, index, offline)
             display(frame)
             if args.once:
                 return
