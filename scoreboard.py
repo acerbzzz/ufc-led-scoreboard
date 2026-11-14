@@ -87,9 +87,13 @@ SMALL_FONT = dict(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :-./'",
 
 def pixels(draw, x, y, label, color, width, font=FONT):
     label = unicodedata.normalize("NFKD", label.upper()).encode("ascii", "ignore").decode()
+    # Center the visible glyphs within this row or fighter column.
+    label = label[:(width - x + 1) // 4].strip()
+    if not label:
+        return
+    glyph_width = 4 * len(label) - 1
+    x += (width - x - glyph_width) // 2
     for letter in label:
-        if x + 3 > width:
-            break
         for row, mask in enumerate(font.get(letter, font["2"])):
             for col in range(3):
                 if int(mask) & (4 >> col):
@@ -111,7 +115,7 @@ def fight_frame(bout, tick, offline, large=False):
                 thumbnail = portrait.resize((18, 16), RESAMPLE.LANCZOS)
             image.paste(thumbnail, (x, 0), thumbnail)
         else:
-            pixels(draw, x + 6, 6, bout.names[corner][:1], color, x + 18)
+            pixels(draw, x, 6, bout.names[corner][:1], color, x + (32 if large else 18))
         if not large:
             draw.line((x, 17, x+17, 17), fill=color)
         winner = bout.state == "post" and bout.winner[corner]
