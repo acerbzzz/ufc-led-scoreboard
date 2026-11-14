@@ -8,7 +8,7 @@ from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 RESAMPLE = getattr(Image, "Resampling", Image)
 
 
-LED_TONE = [round(186 * (value / 255.0) ** 1.32) for value in range(256)]
+LED_TONE = [round(200 * (value / 255.0) ** 0.93) for value in range(256)]
 
 
 def panel_portrait(image):

@@ -156,7 +156,7 @@ def fight_frame(bout, tick, offline, large=False):
         if not large:
             draw.line((x, 17, x+17, 17), fill=color)
         winner = bout.state == "post" and bout.winner[corner]
-        pixels(draw, corner * 32, 16 if large else 19, bout.names[corner], "#63ff84" if winner else "white", (corner+1)*32, SMALL_FONT if large else FONT)
+        pixels(draw, corner * 32, 17 if large else 19, bout.names[corner], "#63ff84" if winner else "white", (corner+1)*32, SMALL_FONT if large else FONT)
     status = {"post": "FINAL", "in": "LIVE", "pre": "CARD"}.get(bout.state, "UFC")
     if bout.state == "pre" and bout.detail == "UPCOMING":
         status = ("MAIN EVENT" if bout.headliner else "UPCOMING") if large else "CARD"
@@ -195,12 +195,34 @@ def fight_frame(bout, tick, offline, large=False):
 def celebration(bout, large=False):
     label = bout.method.upper()
     image = fight_frame(bout, 0, False, large)
-    for step in range(14):
+    winner = bout.names[bout.winner.index(True)] if bout.winner.count(True) == 1 else ""
+    neutral = "DRAW" in label or "NO CONTEST" in label or label == "NC"
+    # Give every character time to scroll into view before the winner is shown.
+    method_frames = max(34, 18 + 2 * max(0, len(label) - 16))
+    for step in range(method_frames + (20 if winner and not neutral else 0)):
         frame = image.copy()
         draw = ImageDraw.Draw(frame)
         draw.rectangle((0, 24, 63, 31), fill="black")
         progress = min(step, 8)
-        if "KO" in label or "KNOCKOUT" in label:
+        if step >= method_frames:
+            pixels(draw, 0, 26, "W " + winner, "#63ff84", 64, SMALL_FONT if large else FONT)
+            yield frame
+            continue
+        if neutral:
+            span = min(28, step * 2)
+            for x in (0, 36):
+                draw.line((x, 31, x + span, 31), fill="#88adff")
+        elif "DISQUAL" in label or label == "DQ":
+            for x in (1, 59):
+                length = min(4, step)
+                draw.line((x, 25, x + length, 25 + length), fill="#ff6030")
+                draw.line((x + length, 25, x, 25 + length), fill="#ff6030")
+        elif "DOCTOR" in label or "MEDICAL" in label:
+            for x in (3, 60):
+                radius = min(2, step)
+                draw.line((x-radius, 27, x+radius, 27), fill="#ff5030")
+                draw.line((x, 27-radius, x, 27+radius), fill="#ff5030")
+        elif "KO" in label or "KNOCKOUT" in label:
             for x in (31-progress*3, 32+progress*3):
                 draw.line((31, 24, x, 31), fill="#ff6030")
         elif "SUB" in label:
@@ -210,7 +232,7 @@ def celebration(bout, large=False):
                 draw.line((x, 31, x+17, 31), fill="#ffcb55")
         else:
             draw.line((0, 31, min(63, step*6), 31), fill="#62ffa3")
-        offset = min(max(0, len(label)-16), max(0, step-4)*2)
+        offset = min(max(0, len(label)-16), max(0, step-8)//2)
         pixels(draw, 0, 25, label[offset:], "white", 64, SMALL_FONT if large else FONT)
         yield frame
 

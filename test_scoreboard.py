@@ -73,7 +73,7 @@ class PanelRefinementTests(unittest.TestCase):
         sample.putdata([(255, 255, 255, 255), (145, 110, 90, 255), (0, 0, 0, 0)])
         toned = panel_portrait(sample)
         self.assertEqual(toned.getchannel("A").tobytes(), sample.getchannel("A").tobytes())
-        self.assertEqual(toned.getpixel((0, 0))[:3], (186, 186, 186))
+        self.assertEqual(toned.getpixel((0, 0))[:3], (200, 200, 200))
         red, green, blue, _ = toned.getpixel((1, 0))
         self.assertGreater(red, green)
         self.assertGreater(green, blue)
