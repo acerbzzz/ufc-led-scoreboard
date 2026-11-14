@@ -189,8 +189,20 @@ def fetch():
         return bouts(json.load(response))
 
 
+def color_test():
+    image = Image.new("RGB", (64, 32))
+    draw = ImageDraw.Draw(image)
+    for row in (0, 16):
+        for column, color in enumerate(("#ff0000", "#00ff00", "#0000ff", "#ffffff")):
+            x = 16 * column
+            draw.rectangle((x, row + 1, x + 14, row + 14), fill=color)
+    return image
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--color-test", action="store_true", help="Show RGB and white on both panel halves")
+    parser.add_argument("--rgb-order", choices=("RGB","RBG","GRB","GBR","BRG","BGR"), default="RGB", help="Order of channels sent to the display")
     parser.add_argument("--demo", action="store_true")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--driver", choices=["preview", "matrix"], default="preview")
@@ -219,12 +231,20 @@ def main():
     played = set()
     eligible = set()
     def display(frame):
+        if args.rgb_order != "RGB":
+            bands = dict(zip("RGB", frame.split()))
+            frame = Image.merge("RGB", tuple(bands[key] for key in args.rgb_order))
         if matrix is not None:
             matrix.SetImage(frame)
         else:
             frame.resize((640, 320), RESAMPLE.NEAREST).save("preview.png")
 
     try:
+        if args.color_test:
+            display(color_test())
+            while matrix is not None and not args.once:
+                time.sleep(1)
+            return
         while True:
             if not args.demo and time.monotonic() >= refresh:
                 try:
