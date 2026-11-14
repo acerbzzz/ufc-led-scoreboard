@@ -20,7 +20,7 @@ The defaults are direct GPIO mapping (regular), brightness 50, and GPIO slowdown
 
 ## Desktop preview
 
-Requires Python 3.8+ and Pillow 9.1+. Install Pillow in your Python environment with `python3 -m pip install -r requirements.txt`. Run `python3 scoreboard.py --demo --once` to write a 640×320 pixel-scaled preview.png. Leave off --once to cycle through fictional scheduled, live and final examples. Only the matrix mode requires the Raspberry Pi rgbmatrix Python binding from https://github.com/hzeller/rpi-rgb-led-matrix.
+Requires Python 3.7+ and Pillow 5.4+. Install Pillow in your Python environment with `python3 -m pip install -r requirements.txt`. Run `python3 scoreboard.py --demo --once` to write a 640×320 pixel-scaled preview.png. Leave off --once to cycle through fictional scheduled, live and final examples. Only the matrix mode requires the Raspberry Pi rgbmatrix Python binding from https://github.com/hzeller/rpi-rgb-led-matrix.
 
 ## Fight data
 
@@ -35,3 +35,8 @@ Scheduled bouts rotate through two introduction frames, one per fighter, with a 
 Both corners stay on screen during the fight and its finish. The middle column shows the provider's round and clock. When ESPN supplies judges' cards, the bottom row cycles through each judge's score in left-to-right fighter order. SCORE PENDING means no cards have been reported. On a final bout, the result also cycles through the winner and the reported method. A missing portrait uses the fighter's initial.
 
 The board plays one short finish animation per bout it followed during this run. KO/TKO uses a burst, submissions use a closing frame, decisions use three judge marks, and other reported outcomes use a sweep with their method name. Starting the board after a fight has ended shows the final without replaying old celebrations. Result details are retrieved in the background from ESPN's MMA competition status endpoint. The offline demo is a fictional example with a submission finish.
+
+On an original Pi Zero W with the working legacy AFL setup, start UFC with
+`sudo python3 scoreboard.py --demo --driver matrix --brightness 10 --gpio-slowdown 2`.
+If Python 3 lacks rgbmatrix, the app sends frames to the AFL environment's
+/usr/bin/python process for display. Both processes exit on Ctrl+C.

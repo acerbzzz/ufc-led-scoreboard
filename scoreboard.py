@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from urllib.request import Request, urlopen
 
 from PIL import Image, ImageDraw
-from portraits import photo
+from portraits import photo, RESAMPLE
 from finishes import ResultFeed, method_label
 
 URL = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard"
@@ -96,7 +96,7 @@ def fight_frame(bout, tick, offline):
         color = ("#ff5050", "#4b9aff")[corner]
         portrait = photo(bout.athlete_ids[corner])
         if portrait is not None:
-            thumbnail = portrait.resize((18, 17), Image.Resampling.LANCZOS)
+            thumbnail = portrait.resize((18, 17), RESAMPLE.LANCZOS)
             image.paste(thumbnail, (x, 0), thumbnail)
         else:
             pixels(draw, x + 6, 6, bout.names[corner][:1], color, x + 18)
@@ -200,13 +200,20 @@ def main():
     args = parser.parse_args()
     matrix = None
     if args.driver == "matrix":
-        from rgbmatrix import RGBMatrix, RGBMatrixOptions
-        options = RGBMatrixOptions()
-        options.rows, options.cols = 32, 64
-        options.hardware_mapping = args.mapping
-        options.gpio_slowdown = args.gpio_slowdown
-        options.brightness = args.brightness
-        matrix = RGBMatrix(options=options)
+        try:
+            from rgbmatrix import RGBMatrix, RGBMatrixOptions
+        except ModuleNotFoundError as exc:
+            if exc.name != "rgbmatrix":
+                raise
+            from legacy_display import LegacyDisplay
+            matrix = LegacyDisplay(args)
+        else:
+            options = RGBMatrixOptions()
+            options.rows, options.cols = 32, 64
+            options.hardware_mapping = args.mapping
+            options.gpio_slowdown = args.gpio_slowdown
+            options.brightness = args.brightness
+            matrix = RGBMatrix(options=options)
     card, refresh, index, offline = DEMO if args.demo else [], 0, 0, False
     results = ResultFeed()
     played = set()
@@ -215,7 +222,7 @@ def main():
         if matrix is not None:
             matrix.SetImage(frame)
         else:
-            frame.resize((640, 320), Image.Resampling.NEAREST).save("preview.png")
+            frame.resize((640, 320), RESAMPLE.NEAREST).save("preview.png")
 
     try:
         while True:
